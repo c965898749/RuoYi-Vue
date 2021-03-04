@@ -1,6 +1,8 @@
 package com.ruoyi.web.controller.system;
 
 import java.io.IOException;
+
+import com.ruoyi.common.utils.file.FastDFSClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -108,19 +110,33 @@ public class SysProfileController extends BaseController
     @PostMapping("/avatar")
     public AjaxResult avatar(@RequestParam("avatarfile") MultipartFile file) throws IOException
     {
-        if (!file.isEmpty())
-        {
-            LoginUser loginUser = tokenService.getLoginUser(ServletUtils.getRequest());
-            String avatar = FileUploadUtils.upload(RuoYiConfig.getAvatarPath(), file);
-            if (userService.updateUserAvatar(loginUser.getUsername(), avatar))
+        try {
+            if (!file.isEmpty())
             {
-                AjaxResult ajax = AjaxResult.success();
-                ajax.put("imgUrl", avatar);
-                // 更新缓存用户头像
-                loginUser.getUser().setAvatar(avatar);
-                tokenService.setLoginUser(loginUser);
-                return ajax;
+                LoginUser loginUser = tokenService.getLoginUser(ServletUtils.getRequest());
+    //            String avatar = FileUploadUtils.upload(RuoYiConfig.getAvatarPath(), file);
+                String originalFilename = file.getOriginalFilename();
+                String extName = originalFilename.substring(originalFilename.lastIndexOf(".") + 1);
+                Long loadSize = 209715200L;
+                // 检查文件大小
+                if (file.getSize() > loadSize) {
+                    return AjaxResult.error("上传文件超过限制");
+                }
+                //上传到图片服务器
+                FastDFSClient fastDFSClient = new FastDFSClient("classpath:fdfs_client.conf");
+                String avatar = fastDFSClient.uploadFile(file.getBytes(), extName);
+                if (userService.updateUserAvatar(loginUser.getUsername(), avatar))
+                {
+                    AjaxResult ajax = AjaxResult.success();
+                    ajax.put("imgUrl", avatar);
+                    // 更新缓存用户头像
+                    loginUser.getUser().setAvatar(avatar);
+                    tokenService.setLoginUser(loginUser);
+                    return ajax;
+                }
             }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
         return AjaxResult.error("上传图片异常，请联系管理员");
     }
